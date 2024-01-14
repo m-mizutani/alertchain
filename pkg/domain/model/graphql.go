@@ -10,6 +10,7 @@ import (
 
 type ActionRecord struct {
 	ID         string            `json:"id"`
+	WorkflowID types.WorkflowID  `json:"workflowID"`
 	Seq        int               `json:"seq"`
 	Uses       string            `json:"uses"`
 	Args       []*ArgumentRecord `json:"args"`

@@ -42,6 +42,7 @@ type ReferenceRecord {
 
 type ActionRecord {
   id: String!
+  workflowID: WorkflowID!
   seq: Int!
   uses: String!
   args: [ArgumentRecord!]!
