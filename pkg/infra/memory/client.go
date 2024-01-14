@@ -19,10 +19,12 @@ type Client struct {
 	attrs     map[types.Namespace]map[types.AttrID]*model.Attribute
 	locks     map[types.Namespace]*lock
 	workflows map[types.WorkflowID]model.WorkflowRecord
+	actions   map[string]model.ActionRecord
 
 	attrMutex     sync.RWMutex
 	lockMutex     sync.Mutex
 	workflowMutex sync.RWMutex
+	actionMutex   sync.RWMutex
 }
 
 func New() *Client {
@@ -30,6 +32,7 @@ func New() *Client {
 		attrs:     map[types.Namespace]map[types.AttrID]*model.Attribute{},
 		locks:     map[types.Namespace]*lock{},
 		workflows: map[types.WorkflowID]model.WorkflowRecord{},
+		actions:   map[string]model.ActionRecord{},
 	}
 }
 
@@ -116,6 +119,44 @@ func (x *Client) GetWorkflow(ctx *model.Context, id types.WorkflowID) (*model.Wo
 	}
 
 	return nil, nil
+}
+
+func (x *Client) GetActions(ctx *model.Context, workflowID types.WorkflowID) ([]model.ActionRecord, error) {
+	x.actionMutex.RLock()
+	defer x.actionMutex.RUnlock()
+
+	var ret []model.ActionRecord
+	for idx := range x.actions {
+		if x.actions[idx].WorkflowID == workflowID {
+			ret = append(ret, x.actions[idx])
+		}
+	}
+
+	// sort by StartedAt
+	sort.Slice(ret, func(i, j int) bool {
+		return ret[i].StartedAt.After(ret[j].StartedAt)
+	})
+
+	return ret, nil
+}
+
+func (x *Client) GetAction(ctx *model.Context, id string) (*model.ActionRecord, error) {
+	x.actionMutex.RLock()
+	defer x.actionMutex.RUnlock()
+
+	a, ok := x.actions[id]
+	if ok {
+		return &a, nil
+	}
+	return nil, nil
+}
+
+func (x *Client) PutAction(ctx *model.Context, action model.ActionRecord) error {
+	x.actionMutex.Lock()
+	defer x.actionMutex.Unlock()
+
+	x.actions[action.ID] = action
+	return nil
 }
 
 // Lock implements interfaces.Database.

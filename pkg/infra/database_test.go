@@ -52,6 +52,9 @@ func testClient(t *testing.T, client interfaces.Database) {
 	t.Run("Workflow", func(t *testing.T) {
 		testWorkflow(t, client)
 	})
+	t.Run("Actions", func(t *testing.T) {
+		testActions(t, client)
+	})
 }
 
 func testPutGet(t *testing.T, client interfaces.Database) {
@@ -243,5 +246,72 @@ func testWorkflow(t *testing.T, client interfaces.Database) {
 	t.Run("GetWorkflow by ID", func(t *testing.T) {
 		resp := gt.R1(client.GetWorkflow(ctx, types.WorkflowID(workflows[2].ID))).NoError(t)
 		gt.V(t, resp.Alert.ID).Equal(workflows[2].Alert.ID)
+	})
+}
+
+func testActions(t *testing.T, client interfaces.Database) {
+	now := time.Now()
+	newActionID := func() string {
+		return uuid.New().String()
+	}
+
+	wfID1 := types.NewWorkflowID()
+	wfID2 := types.NewWorkflowID()
+	actions := []model.ActionRecord{
+		{
+			ID:         newActionID(),
+			WorkflowID: wfID1,
+			StartedAt:  now,
+		},
+		{
+			ID:         newActionID(),
+			WorkflowID: wfID1,
+			StartedAt:  now.Add(1 * time.Second),
+		},
+		{
+			ID:         newActionID(),
+			WorkflowID: wfID2,
+			StartedAt:  now.Add(2 * time.Second),
+		},
+		{
+			ID:         newActionID(),
+			WorkflowID: wfID2,
+			StartedAt:  now.Add(3 * time.Second),
+		},
+		{
+			ID:         newActionID(),
+			WorkflowID: wfID1,
+			StartedAt:  now.Add(4 * time.Second),
+		},
+	}
+
+	ctx := model.NewContext()
+	for _, wf := range actions {
+		gt.NoError(t, client.PutAction(ctx, wf))
+	}
+
+	t.Run("GetActions by wfID1", func(t *testing.T) {
+		resp := gt.R1(client.GetActions(ctx, wfID1)).NoError(t)
+		gt.A(t, resp).Length(3).At(0, func(t testing.TB, v model.ActionRecord) {
+			gt.Equal(t, v.ID, actions[4].ID)
+		}).At(1, func(t testing.TB, v model.ActionRecord) {
+			gt.Equal(t, v.ID, actions[1].ID)
+		}).At(2, func(t testing.TB, v model.ActionRecord) {
+			gt.Equal(t, v.ID, actions[0].ID)
+		})
+	})
+
+	t.Run("GetActions by wfID2", func(t *testing.T) {
+		resp := gt.R1(client.GetActions(ctx, wfID2)).NoError(t)
+		gt.A(t, resp).Length(2).At(0, func(t testing.TB, v model.ActionRecord) {
+			gt.Equal(t, v.ID, actions[3].ID)
+		}).At(1, func(t testing.TB, v model.ActionRecord) {
+			gt.Equal(t, v.ID, actions[2].ID)
+		})
+	})
+
+	t.Run("GetAction by ID", func(t *testing.T) {
+		resp := gt.R1(client.GetAction(ctx, actions[2].ID)).NoError(t)
+		gt.V(t, resp.ID).Equal(actions[2].ID)
 	})
 }

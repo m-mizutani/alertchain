@@ -26,6 +26,7 @@ type Client struct {
 	databaseID         string
 	attrCollection     string
 	workflowCollection string
+	actionCollection   string
 }
 
 const (
@@ -175,6 +176,55 @@ func (x *Client) GetWorkflow(ctx *model.Context, id types.WorkflowID) (*model.Wo
 	return &workflow, nil
 }
 
+func (x *Client) GetActions(ctx *model.Context, workflowID types.WorkflowID) ([]model.ActionRecord, error) {
+	var actions []model.ActionRecord
+	iter := x.client.Collection(x.actionCollection).
+		Where("WorkflowID", "==", workflowID.String()).
+		OrderBy("StartedAt", firestore.Desc).
+		Documents(ctx)
+
+	for {
+		doc, err := iter.Next()
+		if err != nil {
+			if errors.Is(err, iterator.Done) {
+				return actions, nil
+			}
+			return nil, types.AsRuntimeErr(goerr.Wrap(err, "failed to get action"))
+		}
+
+		var action model.ActionRecord
+		if err := doc.DataTo(&action); err != nil {
+			return nil, types.AsRuntimeErr(goerr.Wrap(err, "failed to unmarshal action"))
+		}
+		actions = append(actions, action)
+	}
+}
+
+func (x *Client) GetAction(ctx *model.Context, id string) (*model.ActionRecord, error) {
+	doc, err := x.client.Collection(x.actionCollection).Doc(id).Get(ctx)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return nil, nil
+		}
+		return nil, types.AsRuntimeErr(goerr.Wrap(err, "failed to get action"))
+	}
+
+	var action model.ActionRecord
+	if err := doc.DataTo(&action); err != nil {
+		return nil, types.AsRuntimeErr(goerr.Wrap(err, "failed to unmarshal action"))
+	}
+
+	return &action, nil
+}
+
+func (x *Client) PutAction(ctx *model.Context, action model.ActionRecord) error {
+	if _, err := x.client.Collection(x.actionCollection).Doc(action.ID).Set(ctx, action); err != nil {
+		return types.AsRuntimeErr(goerr.Wrap(err, "failed to put action"))
+	}
+
+	return nil
+}
+
 type attribute struct {
 	model.Attribute
 	ExpiresAt time.Time `firestore:"expires_at"`
@@ -309,6 +359,7 @@ func New(ctx *model.Context, projectID string, databaseID string) (*Client, erro
 		databaseID:         databaseID,
 		attrCollection:     "attrs",
 		workflowCollection: "workflows",
+		actionCollection:   "actions",
 	}, nil
 }
 
